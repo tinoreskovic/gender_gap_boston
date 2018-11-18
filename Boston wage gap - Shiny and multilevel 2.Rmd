@@ -1,0 +1,512 @@
+---
+title: "Two Sigma Research Challenge"
+author: "Tin Oreskovic"
+date: "11/6/2018"
+output:
+  pdf_document:
+    fig_caption: yes
+    keep_tex: yes
+  html_document:
+    df_print: paged
+  word_document: default
+---
+
+
+```{r setup, include=FALSE, warning=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+```
+
+```{r}
+#install.packages("ggplot2")
+#install.packages("tidyquant")
+#install.packages("rstanarm")
+#install.packages("lme4")
+#install.packages("stringr")
+#install.packages("genderdata_package")
+#install.packages("gender")
+#install.packages("shiny")
+#install.packages('tidyr')
+```
+
+
+Write a report trying to tell an actionable story (i.e., what can someone do with the information you present?) and consider the following questions:
+???	What is the hypothesis you are testing, and why does the metric (or metrics) you have chosen make sense to test the hypothesis?
+???	What are your assumptions going into the analysis? 
+???	How much data are you working with? Is your result significant given the dataset?
+???	If you had more time, what extensions might you want to explore?
+
+
+
+
+```{r}
+library(ggplot2)
+library(scales)
+library(ggthemes)
+library(dplyr)
+library(plyr)
+library(arm)
+library(rstanarm)
+library(lme4)
+```
+
+```{r}
+earnings <- read.csv("~/Desktop/employee-earnings-report-2017.csv")
+var_names <- tolower(colnames(earnings))
+colnames(earnings)<-var_names
+```
+
+```{r}
+summary(earnings)
+```
+
+
+
+```{r}
+library("stringr")
+earnings$total.earnings <- str_replace(
+    earnings$total.earnings,
+    pattern = ',', 
+    replacement = ''
+)
+earnings$total.earnings <- str_replace(
+    earnings$total.earnings, 
+    pattern = '\\$', 
+    replacement = '' 
+)
+
+earnings$total.earnings <- as.numeric(earnings$total.earnings)
+
+##########
+
+earnings$regular <- str_replace(
+    earnings$regular,
+    pattern = ',', 
+    replacement = ''
+)
+earnings$regular <- str_replace(
+    earnings$regular,
+    pattern = '\\$', 
+    replacement = ''
+)
+
+earnings$regular <- as.numeric(earnings$regular)
+
+#######
+
+earnings$quinn.education.incentive <- str_replace(
+    earnings$quinn.education.incentive,
+    pattern = ',', 
+    replacement = ''
+)
+earnings$quinn.education.incentive <- str_replace(
+    earnings$quinn.education.incentive, 
+    pattern = '\\$', 
+    replacement = '' 
+)
+
+earnings$quinn.education.incentive <- as.numeric(earnings$quinn.education.incentive)
+
+
+##################
+
+earnings$retro <- str_replace(
+    earnings$retro,
+    pattern = ',', 
+    replacement = ''
+)
+earnings$retro <- str_replace(
+    earnings$retro, 
+    pattern = '\\$', 
+    replacement = '' 
+)
+
+earnings$retro <- as.numeric(earnings$retro)
+
+##################
+
+earnings$overtime <- str_replace(
+    earnings$overtime,
+    pattern = ',', 
+    replacement = ''
+)
+earnings$overtime <- str_replace(
+    earnings$overtime, 
+    pattern = '\\$', 
+    replacement = '' 
+)
+
+earnings$overtime <- as.numeric(earnings$overtime)
+
+
+##################
+
+earnings$detail <- str_replace(
+    earnings$detail,
+    pattern = ',', 
+    replacement = ''
+)
+earnings$detail <- str_replace(
+    earnings$detail, 
+    pattern = '\\$', 
+    replacement = '' 
+)
+
+earnings$detail <- as.numeric(earnings$detail)
+
+
+##################
+
+earnings$injured <- str_replace(
+    earnings$injured,
+    pattern = ',', 
+    replacement = ''
+)
+earnings$injured <- str_replace(
+    earnings$injured, 
+    pattern = '\\$', 
+    replacement = '' 
+)
+
+earnings$injured <- as.numeric(earnings$injured)
+
+
+```
+
+
+
+
+
+
+```{r}
+library(tidyr)
+earnings <- separate(data = earnings, col = name, into = c("last", "first"), sep = "\\,")
+earnings <- separate(data = earnings, col = first, into = c("first_name", "middle_initial"), sep = "\\ ")
+```
+
+https://www.cityofboston.gov/images_documents/2015.04.14%20Final%20Draft-UPDATED_City%20of%20Boston%20Workforce%20Profile%20Report_tcm3-50873.pdf
+
+
+```{r}
+earnings$median_year <- 1970
+```
+
+
+```{r}
+library("gender")
+aug_earnings <- gender_df(earnings, name_col = "first_name", year_col = "median_year",
+                     method = "ssa")
+```
+
+
+```{r}
+earnings <- earnings %>%
+  left_join(aug_earnings, by = c("first_name" = "name"))
+```
+
+
+```{r}
+earnings$gender <- as.factor(earnings$gender)
+```
+
+
+
+```{r fig.height=7, fig.width=9}
+ggplot(earnings) +
+  geom_point(aes(x = gender, y = total.earnings), alpha=0.2, position = "jitter") +
+  theme_light(base_size = 24) +
+  scale_colour_colorblind() +
+  geom_bar(aes(gender, total.earnings, fill = gender), 
+           position = "dodge", stat = "summary", fun.y = "mean", alpha=0.4) + scale_y_continuous(labels = comma) +
+  coord_flip() + ylab("total earnings") 
+
+```
+
+
+
+
+
+```{r}
+library(dplyr)    
+sub_earnings <- filter(earnings, ((earnings$proportion_male - 0.7 > 0) | (earnings$proportion_female - 0.7 > 0)))
+```
+
+
+
+```{r fig.height=7, fig.width=9}
+ggplot(sub_earnings) +
+  geom_point(aes(x = gender, y = total.earnings), alpha=0.2, position = "jitter") +
+  theme_light(base_size = 24) +
+  scale_colour_colorblind() +
+  geom_bar(aes(gender, total.earnings, fill = gender), 
+           position = "dodge", stat = "summary", fun.y = "mean", alpha=0.4) +
+  scale_y_continuous(labels = comma, breaks=seq(0,300000,30000)) + coord_flip() +
+  ylab("total earnings") 
+```
+
+
+```{r}
+library(data.table)
+ear_tab <- data.table(sub_earnings)
+ear_tab[,list(mean=mean(total.earnings),sd=sd(total.earnings)),by=gender]
+
+ear_tab <- data.table(earnings)
+ear_tab[,list(mean=mean(total.earnings),sd=sd(total.earnings)),by=gender]
+```
+
+
+```{r}
+library('shiny')
+library('DT')
+myDataFrame <- sub_earnings
+```
+
+
+
+```{r}
+
+ui_dep <- shinyUI(fluidPage(
+  mainPanel(
+fluidRow(
+selectInput("selectInput",label ="department", choices=c(distinct(sub_earnings, department.name, .keep_all = FALSE)), selected = NULL)
+),
+fluidRow(
+plotOutput("barplot")
+     )
+    )
+  ))
+```
+
+
+```{r fig.height=20, fig.width=20}
+
+server_dep <- shinyServer(function(input, output,session){
+
+
+  updateSelectInput(session, 'selectInput', choices=c(distinct(myDataFrame, department.name, .keep_all = FALSE)))
+
+  filterData <- reactive({
+      myDataFrame[which(myDataFrame$department.name == input$selectInput),]
+
+  })
+
+  output$barplot <- renderPlot({
+    ggplot(filterData(),selection="single",rownames = F) +
+  geom_point(aes(x = gender, y = total.earnings), alpha=0.2, position = "jitter") +
+  theme_light(base_size = 24) +
+  scale_colour_colorblind() +
+  geom_bar(aes(gender, total.earnings, fill = gender), stat = "summary", fun.y = "mean", alpha=0.4) +
+  scale_y_continuous(labels = comma) + coord_flip() +
+  ylab("total earnings") +
+  geom_errorbar(aes(gender, total.earnings, fill = gender), stat = "summary", fun.y = "sd", alpha=0.4)
+  }, height = 500, width = 900 )
+
+
+})
+
+shinyApp(ui = ui_dep, server = server_dep)
+```
+
+
+```{r}
+
+ui <- shinyUI(fluidPage(
+  mainPanel(
+fluidRow(
+selectInput("selectInput",label ="job title", choices=c(distinct(sub_earnings, title, .keep_all = FALSE)), selected = NULL)
+),
+fluidRow(
+plotOutput("barplot")
+     )
+    )
+  ))
+
+```
+
+```{r fig.height=7, fig.width=9}
+
+server <- shinyServer(function(input, output,session){
+
+
+  updateSelectInput(session, 'selectInput', choices=c(distinct(myDataFrame, title, .keep_all = FALSE)))
+  
+  filterData <- reactive({
+      myDataFrame[which(myDataFrame$title == input$selectInput),]
+
+  })
+
+  output$barplot <- renderPlot({
+    ggplot(filterData(),selection="single",rownames = F) +
+  geom_point(aes(x = gender, y = total.earnings), alpha=0.2, position = "jitter") +
+  theme_light(base_size = 24) +
+  scale_colour_colorblind() +
+  geom_bar(aes(gender, total.earnings, fill = gender), 
+           position = "dodge", stat = "summary", fun.y = "mean", alpha=0.4) +
+  scale_y_continuous(labels = comma) + coord_flip() +
+  ylab("total earnings")   
+  }, height = 500, width = 900)
+
+
+})
+
+shinyApp(ui = ui, server = server)
+```
+
+
+
+MULTILEVEL TIME!
+
+For the purposes of graphing, we restrict the case to estimation by lmer, without the simulations:
+```{r}
+fit1b <- lmer(total.earnings ~ gender  + ( 1 + gender | department.name), data = sub_earnings)
+```
+
+```{r}
+display(fit1b)
+```
+
+```{r}
+coefs <- data.frame(coef(summary(fit1b)))
+coefs$p.z <- 2 * (1 - pnorm(abs(coefs$t.value)))
+coefs
+```
+
+
+
+```{r}
+estimates1 <- as.data.frame(coef(fit1b)[1])
+estimates1_se <- as.data.frame(se.coef(fit1b)[2])
+
+colnames(estimates1) <- c("intercept_coef", "slope_coef")
+colnames(estimates1_se) <- c("intercept_se", "slope_se")
+estimated1 <- merge(estimates1, estimates1_se, by=0) 
+
+estimated1$upper_confidence <- (estimated1$slope_coef + 1.96*(estimated1$slope_se))
+estimated1$lower_confidence <- (estimated1$slope_coef - 1.96*(estimated1$slope_se))
+estimated1$significant_f <- ifelse(((estimated1$slope_coef - 1.96*(estimated1$slope_se)) > 0), 1, 0)
+estimated1$significant <- ifelse(((abs(estimated1$slope_coef) - 1.96*(estimated1$slope_se)) > 0), 1, 0)
+
+sum(estimated1$significant_f == 1)
+sum(estimated1$significant == 1)
+sum(estimated1$significant_f == 1)/sum(estimated1$significant == 1)
+```
+
+```{r}
+departments1_f <- estimated1[ which(estimated1$significant_f == 1), ]
+departments1_f
+```
+
+
+
+
+
+
+
+
+```{r}
+fit2b <- lmer(total.earnings ~ gender  + ( 1 + gender | department.name/title), data = sub_earnings)
+```
+
+```{r}
+display(fit2b)
+```
+
+```{r}
+coefs <- data.frame(coef(summary(fit2b)))
+coefs$p.z <- 2 * (1 - pnorm(abs(coefs$t.value)))
+coefs
+```
+
+
+```{r}
+estimates2 <- as.data.frame(coef(fit2b)[1])
+estimates2_se <- as.data.frame(se.coef(fit2b)[2])
+
+colnames(estimates2) <- c("intercept_coef", "slope_coef")
+colnames(estimates2_se) <- c("intercept_se", "slope_se")
+estimated2 <- merge(estimates2, estimates2_se, by=0) 
+
+estimated2$upper_confidence <- (estimated2$slope_coef + 1.96*(estimated2$slope_se))
+estimated2$lower_confidence <- (estimated2$slope_coef - 1.96*(estimated2$slope_se))
+estimated2$significant_f <- ifelse(((estimated2$slope_coef - 1.96*(estimated2$slope_se)) > 0), 2, 0)
+estimated2$significant <- ifelse(((abs(estimated2$slope_coef) - 1.96*(estimated2$slope_se)) > 0), 2, 0)
+
+sum(estimated2$significant_f == 2)
+sum(estimated2$significant == 2)
+sum(estimated2$significant_f == 2)/sum(estimated2$significant == 2)
+```
+```{r}
+departments2_f <- estimated2[ which(estimated2$significant_f == 2), ]
+departments2_f
+```
+
+
+CETRVRTI:
+
+
+```{r}
+corrected <- sub_earnings
+corrected$overtime[is.na(corrected$overtime)] <- 0
+corrected$quinn.education.incentive[is.na(corrected$quinn.education.incentive)] <- 0
+corrected$regular[is.na(corrected$regular)] <- 0
+corrected$detail[is.na(corrected$detail)] <- 0
+corrected$relevant_earnings <- (corrected$regular + corrected$overtime + corrected$quinn.education.incentive + corrected$detail)
+
+corrected <- corrected %>%
+  group_by(department.name) %>%
+  filter(sum(gender == "female") >= 20)
+
+corrected <- corrected %>%
+  group_by(department.name) %>%
+  filter(sum(gender == "male") >= 20)
+
+
+```
+
+
+```{r}
+fit3b <- lmer(relevant_earnings ~ gender  + ( 1 + gender | department.name), data = corrected)
+```
+
+```{r}
+display(fit3b)
+```
+
+
+
+```{r}
+coefs <- data.frame(coef(summary(fit2b)))
+coefs$p.z <- 2 * (1 - pnorm(abs(coefs$t.value)))
+coefs
+```
+
+
+
+
+```{r}
+estimates3 <- as.data.frame(coef(fit3b)[1])
+estimates3_se <- as.data.frame(se.coef(fit3b)[2])
+
+colnames(estimates3) <- c("intercept_coef", "slope_coef")
+colnames(estimates3_se) <- c("intercept_se", "slope_se")
+estimated3 <- merge(estimates3, estimates3_se, by=0) 
+
+estimated3$upper_confidence <- (estimated3$slope_coef + 1.96*(estimated3$slope_se))
+estimated3$lower_confidence <- (estimated3$slope_coef - 1.96*(estimated3$slope_se))
+estimated3$significant_f <- ifelse(((estimated3$slope_coef - 1.96*(estimated3$slope_se)) > 0), 1, 0)
+estimated3$significant <- ifelse(((abs(estimated3$slope_coef) - 1.96*(estimated3$slope_se)) > 0), 1, 0)
+
+sum(estimated3$significant_f == 1)
+sum(estimated3$significant == 1)
+sum(estimated3$significant_f == 1)/sum(estimated3$significant == 1)
+```
+```{r}
+departments3_f <- estimated3[ which(estimated3$significant_f == 1), ]
+departments3_f
+```
+
+
+
+BASICALLY LOOKING AT EITEHR DEP or postiion, it's still women who are paid less and whenber its significant surpirse surprise it's women (THAT ITSELF IS NOT AN ACCIDENT!) and as Expected more variation across departments and positions than within. not accidental that women get promoted less, consisten with researchs showing they have a harded time !
+
+
+
